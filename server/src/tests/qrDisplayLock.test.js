@@ -73,3 +73,40 @@ describe('Attendance kiosk lock', () => {
     expect(display.save).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('Office QR display registration', () => {
+  test('persists required office details, optional description, and selected status', async () => {
+    const createdDisplay = { _id: displayId };
+    const createDisplay = jest.spyOn(OfficeQRDisplay, 'create').mockResolvedValue(createdDisplay);
+
+    await expect(qrDisplayService.pairDisplay({
+      displayName: 'Lobby QR',
+      officeName: 'VorldX Main Office',
+      location: 'Ground Floor Reception',
+      notes: 'Front desk tablet',
+      isActive: true
+    }, actor)).resolves.toBe(createdDisplay);
+
+    expect(createDisplay).toHaveBeenCalledWith(expect.objectContaining({
+      displayName: 'Lobby QR',
+      officeName: 'VorldX Main Office',
+      location: 'Ground Floor Reception',
+      notes: 'Front desk tablet',
+      isActive: true,
+      isPaired: true,
+      pairedBy: adminId
+    }));
+  });
+
+  test('rejects registration without office name or location', async () => {
+    const createDisplay = jest.spyOn(OfficeQRDisplay, 'create');
+
+    await expect(qrDisplayService.pairDisplay({
+      displayName: 'Lobby QR',
+      officeName: ' ',
+      location: '',
+    }, actor)).rejects.toMatchObject({ statusCode: 400 });
+
+    expect(createDisplay).not.toHaveBeenCalled();
+  });
+});

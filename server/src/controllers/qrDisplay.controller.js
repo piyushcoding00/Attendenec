@@ -9,14 +9,14 @@ const auditService = require('../services/auditService');
  * Registers and pairs a new office QR display device.
  */
 exports.pair = catchAsync(async (req, res, next) => {
-  const { displayName, location, notes, pairingCode } = req.body;
+  const { displayName, officeName, location, notes, pairingCode, isActive } = req.body;
 
   if (!displayName || !displayName.trim()) {
     return next(new AppError('Display name is required', 400));
   }
 
   const display = await qrDisplayService.pairDisplay(
-    { displayName, location, notes, pairingCode },
+    { displayName, officeName, location, notes, pairingCode, isActive },
     req.user
   );
 
@@ -29,6 +29,7 @@ exports.pair = catchAsync(async (req, res, next) => {
     targetId: display._id,
     metadata: {
       displayName: display.displayName,
+      officeName: display.officeName,
       location: display.location,
       pairingCode: display.pairingCode
     },

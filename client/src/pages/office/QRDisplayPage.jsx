@@ -13,6 +13,8 @@ import {
   CameraOff,
   LockKeyhole,
   UnlockKeyhole,
+  Maximize,
+  Minimize,
 } from 'lucide-react';
 import { qrDisplayService } from '../../services/api';
 import Button from '../../components/ui/Button';
@@ -34,6 +36,7 @@ export const QRDisplayPage = () => {
   const [pendingCapture, setPendingCapture] = useState(null);
   const [captureStatus, setCaptureStatus] = useState('Waiting for employee');
   const [displayName, setDisplayName] = useState('');
+  const [officeName, setOfficeName] = useState('');
   const [displayLocation, setDisplayLocation] = useState('');
   const [isKioskLocked, setIsKioskLocked] = useState(false);
   const [isKioskStateLoading, setIsKioskStateLoading] = useState(Boolean(displayId));
@@ -43,6 +46,7 @@ export const QRDisplayPage = () => {
 
   // Live Clock
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   const timerRef = useRef(null);
   const clockRef = useRef(null);
@@ -52,6 +56,25 @@ export const QRDisplayPage = () => {
   const pendingCaptureRef = useRef(null);
   const captureBusyRef = useRef(false);
   const serverOffsetRef = useRef(0);
+  const tokenExpiresAtRef = useRef(0);
+
+  useEffect(() => {
+    const syncFullscreenState = () => setIsFullscreen(Boolean(document.fullscreenElement));
+    document.addEventListener('fullscreenchange', syncFullscreenState);
+    return () => document.removeEventListener('fullscreenchange', syncFullscreenState);
+  }, []);
+
+  const toggleFullscreen = async () => {
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+      } else if (document.documentElement.requestFullscreen) {
+        await document.documentElement.requestFullscreen();
+      }
+    } catch (fullscreenError) {
+      setError(fullscreenError.message || 'Fullscreen mode is not available in this browser.');
+    }
+  };
 
   useEffect(() => {
     if (!displayId) {
@@ -194,10 +217,12 @@ export const QRDisplayPage = () => {
     try {
       const res = await qrDisplayService.getToken(id);
       const data = res.data || res;
+      const serverTime = data.serverTime ? new Date(data.serverTime).getTime() : Date.now();
       if (data.serverTime) {
-        serverOffsetRef.current = new Date(data.serverTime).getTime() - Date.now();
+        serverOffsetRef.current = serverTime - Date.now();
       }
       setDisplayName(data.displayName || '');
+      setOfficeName(data.officeName || '');
       setDisplayLocation(data.location || '');
       const rawToken = data.token || data;
 
@@ -217,7 +242,10 @@ export const QRDisplayPage = () => {
       });
 
       setQrImageDataUrl(url);
-      setCountdown(data.expiresIn || 30);
+      tokenExpiresAtRef.current = data.expiresAt
+        ? new Date(data.expiresAt).getTime()
+        : serverTime + (data.expiresIn || 30) * 1000;
+      setCountdown(Math.max(0, Math.ceil((tokenExpiresAtRef.current - serverTime) / 1000)));
     } catch (err) {
       console.error('Failed to issue QR token:', err);
       setQrImageDataUrl('');
@@ -243,11 +271,14 @@ export const QRDisplayPage = () => {
     timerRef.current = setInterval(() => {
       setCountdown((prev) => {
         if (pendingCaptureRef.current) return prev;
-        if (prev <= 1) {
+        const remaining = Math.ceil(
+          (tokenExpiresAtRef.current - (Date.now() + serverOffsetRef.current)) / 1000
+        );
+        if (remaining <= 0) {
           fetchNewToken(displayId);
-          return 30;
+          return 0;
         }
-        return prev - 1;
+        return remaining;
       });
     }, 1000);
 
@@ -414,9 +445,11 @@ export const QRDisplayPage = () => {
             <h1 className="text-2xl font-black tracking-tight bg-gradient-to-r from-white via-slate-100 to-cyan-300 bg-clip-text text-transparent">
               VORLDX
             </h1>
+            <p className="text-[10px] uppercase tracking-widest text-gray-400">Attendance System</p>
             <p className="text-xs uppercase tracking-widest text-cyan-400 font-semibold">
               {displayName || 'ATTENDANCE KIOSK'}
             </p>
+            {officeName && <p className="text-[11px] text-gray-300">{officeName}</p>}
             {displayLocation && <p className="text-[11px] text-gray-400">{displayLocation}</p>}
           </div>
         </div>
@@ -429,6 +462,7 @@ export const QRDisplayPage = () => {
                 hour: '2-digit',
                 minute: '2-digit',
                 second: '2-digit',
+                timeZone: 'Asia/Kolkata',
               })}
             </span>
             <p className="text-[11px] text-gray-400 uppercase tracking-wider">
@@ -436,6 +470,7 @@ export const QRDisplayPage = () => {
                 weekday: 'short',
                 month: 'short',
                 day: 'numeric',
+                timeZone: 'Asia/Kolkata',
               })}
             </p>
           </div>
@@ -459,6 +494,15 @@ export const QRDisplayPage = () => {
               </>
             )}
           </div>
+          <button
+            type="button"
+            onClick={toggleFullscreen}
+            className="rounded-lg border border-white/10 p-2 text-gray-300 transition-colors hover:bg-white/10 hover:text-white"
+            aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+            title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+          >
+            {isFullscreen ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}
+          </button>
         </div>
       </header>
 

@@ -84,6 +84,7 @@ exports.issueToken = async (displayId, supervisor) => {
     serverTime: new Date(),
     displayId: display._id,
     displayName: display.displayName,
+    officeName: display.officeName,
     location: display.location,
     isKioskLocked: display.isKioskLocked,
     locationConfigured: true,
@@ -181,15 +182,24 @@ exports.getDisplayById = async (displayId) => {
 /**
  * Pair a new display (Admin).
  *
- * @param {Object} data - { displayName, location, notes, pairingCode }
+ * @param {Object} data - { displayName, officeName, location, notes, pairingCode, isActive }
  * @param {Object} adminUser - Authenticated admin user
  * @returns {Promise<Document>}
  */
 exports.pairDisplay = async (data, adminUser) => {
-  const { displayName, location, notes, pairingCode } = data;
+  const { displayName, officeName, location, notes, pairingCode, isActive } = data;
 
   if (!displayName || !displayName.trim()) {
     throw new AppError('Display name is required', 400);
+  }
+  if (!officeName || !officeName.trim()) {
+    throw new AppError('Office name is required', 400);
+  }
+  if (!location || !location.trim()) {
+    throw new AppError('Office location is required', 400);
+  }
+  if (isActive !== undefined && typeof isActive !== 'boolean') {
+    throw new AppError('Display status must be a boolean value', 400);
   }
 
   const generatedCode =
@@ -199,13 +209,14 @@ exports.pairDisplay = async (data, adminUser) => {
 
   const display = await OfficeQRDisplay.create({
     displayName: displayName.trim(),
-    location: location ? location.trim() : '',
+    officeName: officeName.trim(),
+    location: location.trim(),
     notes: notes ? notes.trim() : '',
     pairingCode: generatedCode,
     isPaired: true,
     pairedAt: new Date(),
     pairedBy: adminUser?._id || adminUser?.id,
-    isActive: false
+    isActive: typeof isActive === 'boolean' ? isActive : false
   });
 
   return display;

@@ -62,7 +62,7 @@ afterEach(() => {
 });
 
 describe('Secure QR attendance processing', () => {
-  test('atomically claims a valid token for one employee and stores verification metadata', async () => {
+  test('atomically consumes a valid token once and stores verification metadata', async () => {
     const result = await attendanceService.processQRScan(...makeScanArgs());
 
     expect(result.action).toBe('check_in');
@@ -86,21 +86,20 @@ describe('Secure QR attendance processing', () => {
       expect.objectContaining({
         _id: qrTokenId,
         isUsed: false,
-        attendanceClaims: { $not: { $elemMatch: { employee: employeeId } } }
+        expiresAt: { $gt: expect.any(Date) }
       }),
       expect.objectContaining({
-        $push: {
-          attendanceClaims: expect.objectContaining({
-            employee: employeeId,
-            attendanceRecord: recordId
-          })
-        }
+        $set: expect.objectContaining({
+          isUsed: true,
+          usedBy: employeeId,
+          usedAt: expect.any(Date)
+        })
       }),
       expect.any(Object)
     );
   });
 
-  test('rejects a token already claimed by this employee and removes the uncommitted record', async () => {
+  test('rejects a previously consumed token and removes the uncommitted record', async () => {
     QRToken.findOneAndUpdate.mockResolvedValueOnce(null);
 
     await expect(attendanceService.processQRScan(...makeScanArgs())).rejects.toMatchObject({
@@ -158,6 +157,25 @@ describe('Secure QR attendance processing', () => {
         })
       }),
       expect.any(Object)
+    );
+  });
+
+  test('releases the token claim if the check-out record cannot be updated', async () => {
+    AttendanceRecord.findOne.mockResolvedValueOnce({
+      _id: recordId,
+      status: 'present',
+      checkIn: new Date(Date.now() - 8 * 60 * 60 * 1000)
+    });
+    AttendanceRecord.findOneAndUpdate.mockResolvedValueOnce(null);
+    const releaseClaim = jest.spyOn(QRToken, 'updateOne').mockResolvedValue({ modifiedCount: 1 });
+
+    await expect(attendanceService.processQRScan(...makeScanArgs())).rejects.toMatchObject({
+      statusCode: 409
+    });
+
+    expect(releaseClaim).toHaveBeenCalledWith(
+      { _id: qrTokenId, isUsed: true, usedBy: employeeId },
+      { $set: { isUsed: false }, $unset: { usedAt: 1, usedBy: 1 } }
     );
   });
 });

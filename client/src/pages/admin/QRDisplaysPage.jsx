@@ -30,13 +30,17 @@ export const QRDisplaysPage = () => {
   // Registration Modal State
   const [isRegisterOpen, setIsRegisterOpen] = useState(false);
   const [displayName, setDisplayName] = useState('');
+  const [officeName, setOfficeName] = useState('');
   const [location, setLocation] = useState('');
+  const [notes, setNotes] = useState('');
+  const [isActive, setIsActive] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [registerError, setRegisterError] = useState('');
 
   // Newly registered display displayId for quick kiosk launch
   const [newlyRegistered, setNewlyRegistered] = useState(null);
   const [copiedId, setCopiedId] = useState(null);
+  const [previewDisplay, setPreviewDisplay] = useState(null);
 
   const fetchDisplays = async () => {
     setIsLoading(true);
@@ -70,12 +74,18 @@ export const QRDisplaysPage = () => {
     try {
       const res = await qrDisplayService.pair({
         displayName: displayName.trim(),
-        location: location.trim() || undefined,
+        officeName: officeName.trim(),
+        location: location.trim(),
+        notes: notes.trim() || undefined,
+        isActive,
       });
       const created = res.data || res;
       setNewlyRegistered(created);
       setDisplayName('');
+      setOfficeName('');
       setLocation('');
+      setNotes('');
+      setIsActive(false);
       await fetchDisplays();
     } catch (err) {
       setRegisterError(err.message || 'Failed to register display.');
@@ -86,8 +96,12 @@ export const QRDisplaysPage = () => {
 
   // Toggle Display Status
   const handleToggleStatus = async (display) => {
+    const nextIsActive = !display.isActive;
+    if (!nextIsActive && !window.confirm(`Disable ${display.displayName}? Attendance scans will stop for this display.`)) {
+      return;
+    }
     try {
-      await qrDisplayService.updateStatus(display._id, !display.isActive);
+      await qrDisplayService.updateStatus(display._id, nextIsActive);
       await fetchDisplays();
     } catch (err) {
       alert(err.message || 'Failed to update display status');
@@ -115,7 +129,8 @@ export const QRDisplaysPage = () => {
           </div>
           <div>
             <p className="font-semibold text-white">{row.displayName}</p>
-            <p className="text-[11px] font-mono text-gray-400">{row.displayId || row._id}</p>
+            <p className="text-xs text-gray-400">{row.officeName || 'Office name not set'}</p>
+            <p className="text-[11px] font-mono text-gray-500">{row.displayId || row._id}</p>
           </div>
         </div>
       ),
@@ -173,6 +188,17 @@ export const QRDisplaysPage = () => {
         const url = getDisplayKioskUrl(row.displayId || row._id);
         return (
           <div className="flex items-center justify-end space-x-2">
+            <button
+              type="button"
+              onClick={() => setPreviewDisplay(row)}
+              disabled={!row.isActive || !row.isPaired}
+              className="inline-flex items-center gap-1 whitespace-nowrap rounded-lg px-2 py-1.5 text-cyan-300 transition-colors hover:bg-cyan-500/10 hover:text-cyan-200 disabled:cursor-not-allowed disabled:opacity-40"
+              title={row.isActive && row.isPaired ? 'Show QR and lock kiosk' : 'Activate and pair this display first'}
+              aria-label={`Show QR for ${row.displayName}`}
+            >
+              <QrCode className="h-4 w-4" />
+              <span className="text-[11px] font-semibold">Show QR</span>
+            </button>
             <button
               type="button"
               onClick={() => copyToClipboard(url, row._id)}
@@ -245,7 +271,7 @@ export const QRDisplaysPage = () => {
           <span>About Dynamic Rotating QR Codes</span>
         </div>
         <p className="leading-relaxed text-gray-400">
-          Each office QR display screen continuously rotates cryptographically signed attendance tokens every 30 seconds. Because each token expires in 30 seconds and is consumed on scan, static photo copies or shared screenshots cannot be used to forge attendance.
+          Each office QR display screen rotates server-issued, cryptographically random attendance tokens every 30 seconds. Tokens are short-lived, hashed at rest, and protected against reuse after attendance is recorded.
         </p>
       </div>
 
@@ -284,14 +310,49 @@ export const QRDisplaysPage = () => {
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
               required
+              maxLength={100}
             />
 
             <Input
-              label="Physical Location"
+              label="Office Name"
+              placeholder="e.g. VorldX Main Office"
+              value={officeName}
+              onChange={(e) => setOfficeName(e.target.value)}
+              required
+              maxLength={100}
+            />
+
+            <Input
+              label="Office Location"
               placeholder="e.g. Building A - Reception Gate 2"
               value={location}
               onChange={(e) => setLocation(e.target.value)}
+              required
+              maxLength={200}
             />
+
+            <Input
+              label="Description (optional)"
+              placeholder="Notes about this display"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              maxLength={500}
+            />
+
+            <div>
+              <label htmlFor="display-status" className="mb-1.5 block text-sm font-medium text-gray-300">
+                Display Status
+              </label>
+              <select
+                id="display-status"
+                value={isActive ? 'active' : 'inactive'}
+                onChange={(event) => setIsActive(event.target.value === 'active')}
+                className="block w-full rounded-lg border border-white/10 bg-navy-800/50 px-3.5 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+              >
+                <option value="inactive">Inactive</option>
+                <option value="active">Active</option>
+              </select>
+            </div>
 
             <div className="flex justify-end space-x-3 pt-3 border-t border-white/10">
               <Button
@@ -364,6 +425,29 @@ export const QRDisplaysPage = () => {
                 Done
               </Button>
             </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        isOpen={Boolean(previewDisplay)}
+        onClose={() => setPreviewDisplay(null)}
+        title={previewDisplay ? `Office QR · ${previewDisplay.displayName}` : 'Office QR'}
+        size="xl"
+        className="max-w-6xl"
+      >
+        {previewDisplay && (
+          <div className="space-y-3">
+            <p className="text-sm text-gray-300">
+              Tablet camera start karein, phir kiosk screen par <span className="font-semibold text-cyan-300">Lock Kiosk</span> dabayein. QR code har 30 seconds mein automatically refresh hota rahega.
+            </p>
+            <iframe
+              key={previewDisplay._id}
+              src={getDisplayKioskUrl(previewDisplay.displayId || previewDisplay._id)}
+              title={`${previewDisplay.displayName} attendance QR kiosk`}
+              allow="camera; fullscreen"
+              className="h-[72vh] min-h-[480px] w-full rounded-xl border border-white/10 bg-navy-950"
+            />
           </div>
         )}
       </Modal>

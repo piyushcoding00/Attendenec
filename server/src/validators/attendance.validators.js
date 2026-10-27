@@ -137,16 +137,28 @@ exports.pairDisplayRules = [
     .withMessage('Display name is required')
     .isLength({ max: 100 })
     .withMessage('Display name cannot exceed 100 characters'),
-  body('location')
-    .optional()
+  body('officeName')
     .trim()
+    .notEmpty()
+    .withMessage('Office name is required')
+    .isLength({ max: 100 })
+    .withMessage('Office name cannot exceed 100 characters'),
+  body('location')
+    .trim()
+    .notEmpty()
+    .withMessage('Office location is required')
     .isLength({ max: 200 })
     .withMessage('Location cannot exceed 200 characters'),
   body('notes')
     .optional()
     .trim()
     .isLength({ max: 500 })
-    .withMessage('Notes cannot exceed 500 characters')
+    .withMessage('Notes cannot exceed 500 characters'),
+  body('isActive')
+    .optional()
+    .isBoolean()
+    .withMessage('Display status must be active or inactive')
+    .toBoolean()
 ];
 
 /**

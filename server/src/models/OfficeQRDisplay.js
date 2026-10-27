@@ -7,6 +7,11 @@ const officeQRDisplaySchema = new mongoose.Schema(
       required: [true, 'Display name is required'],
       trim: true
     },
+    officeName: {
+      type: String,
+      trim: true,
+      default: ''
+    },
     pairingCode: {
       type: String,
       unique: true,

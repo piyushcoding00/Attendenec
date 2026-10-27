@@ -441,6 +441,7 @@ describe('Attendance', () => {
       location: 'Test Room',
       isActive: true,
       isPaired: true,
+      isKioskLocked: true,
       pairedBy: adminUser._id,
     });
     qrDisplayId = display._id.toString();

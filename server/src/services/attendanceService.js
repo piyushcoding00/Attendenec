@@ -258,7 +258,7 @@ exports.processQRScan = async (employee, qrTokenRecord, displayId, userLocation 
     );
     const policy = await AttendancePolicy.getCurrent();
     const halfDayMinutes = policy?.halfDayDurationMinutes || 240;
-    await claimAttendanceToken(qrTokenRecord, employeeId, existingRecord._id, now);
+    await claimAttendanceToken(qrTokenRecord, employeeId, now);
     let updatedRecord;
     try {
       updatedRecord = await AttendanceRecord.findOneAndUpdate(
@@ -275,11 +275,11 @@ exports.processQRScan = async (employee, qrTokenRecord, displayId, userLocation 
         { new: true, runValidators: true }
       );
     } catch (error) {
-      await releaseAttendanceTokenClaim(qrTokenRecord._id, employeeId, existingRecord._id);
+      await releaseAttendanceTokenClaim(qrTokenRecord._id, employeeId);
       throw error;
     }
     if (!updatedRecord) {
-      await releaseAttendanceTokenClaim(qrTokenRecord._id, employeeId, existingRecord._id);
+      await releaseAttendanceTokenClaim(qrTokenRecord._id, employeeId);
       throw new AppError('Check-out was already recorded. Refresh your attendance status.', 409);
     }
 
@@ -313,7 +313,7 @@ exports.processQRScan = async (employee, qrTokenRecord, displayId, userLocation 
   }
 
   try {
-    await claimAttendanceToken(qrTokenRecord, employeeId, record._id, now);
+    await claimAttendanceToken(qrTokenRecord, employeeId, now);
   } catch (error) {
     await AttendanceRecord.deleteOne({ _id: record._id });
     throw error;
@@ -334,38 +334,31 @@ exports.processQRScan = async (employee, qrTokenRecord, displayId, userLocation 
   };
 };
 
-const claimAttendanceToken = async (tokenRecord, employeeId, recordId, now) => {
+const claimAttendanceToken = async (tokenRecord, employeeId, now) => {
   const claimedToken = await QRToken.findOneAndUpdate(
     {
       _id: tokenRecord._id,
       isUsed: false,
-      expiresAt: { $gt: now },
-      attendanceClaims: { $not: { $elemMatch: { employee: employeeId } } }
+      expiresAt: { $gt: now }
     },
     {
-      $push: {
-        attendanceClaims: {
-          employee: employeeId,
-          attendanceRecord: recordId,
-          usedAt: now
-        }
-      }
+      $set: { isUsed: true, usedAt: now, usedBy: employeeId }
     },
     { new: true, runValidators: true }
   );
 
   if (!claimedToken) {
     throw new AppError(
-      'This QR code has expired or was already used for your attendance. Scan the current office QR code and try again.',
+      'This QR code has expired or was already used. Scan the current office QR code and try again.',
       409
     );
   }
 };
 
-const releaseAttendanceTokenClaim = async (tokenId, employeeId, recordId) => {
+const releaseAttendanceTokenClaim = async (tokenId, employeeId) => {
   await QRToken.updateOne(
-    { _id: tokenId },
-    { $pull: { attendanceClaims: { employee: employeeId, attendanceRecord: recordId } } }
+    { _id: tokenId, isUsed: true, usedBy: employeeId },
+    { $set: { isUsed: false }, $unset: { usedAt: 1, usedBy: 1 } }
   );
 };
 
