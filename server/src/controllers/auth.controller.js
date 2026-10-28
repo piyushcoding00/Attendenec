@@ -28,6 +28,10 @@ exports.startVerification = catchAsync(async (req, res) => {
     user = await User.findOne({ employeeId: employeeId.trim().toUpperCase() });
   }
 
+  if (!user && employeeId) {
+    return sendError(res, 'Employee not found', 404);
+  }
+
   // If user does not exist yet: Auto-generate new Employee ID and create profile
   if (!user) {
     if (!name || !department) {
@@ -322,7 +326,7 @@ exports.login = catchAsync(async (req, res) => {
       metadata: { reason: 'Account inactive' },
       req
     });
-    return sendError(res, 'Your account has been deactivated. Please contact HR.', 403);
+    return sendError(res, 'Invalid Employee ID or password', 401);
   }
 
   if (!user.isAccountActivated) {

@@ -36,12 +36,12 @@ exports.getMyAttendance = catchAsync(async (req, res, next) => {
     limit
   });
 
-  return sendPaginated(
-    res,
-    result.records,
-    result.pagination,
-    'My attendance history retrieved successfully'
-  );
+  return res.status(200).json({
+    success: true,
+    message: 'My attendance history retrieved successfully',
+    data: { records: result.records },
+    pagination: result.pagination
+  });
 });
 
 /**
@@ -52,12 +52,12 @@ exports.getMyAttendance = catchAsync(async (req, res, next) => {
 exports.getAllAttendance = catchAsync(async (req, res, next) => {
   const result = await attendanceService.getAllAttendance(req.query);
 
-  return sendPaginated(
-    res,
-    result.records,
-    result.pagination,
-    'Attendance records retrieved successfully'
-  );
+  return res.status(200).json({
+    success: true,
+    message: 'Attendance records retrieved successfully',
+    data: { records: result.records },
+    pagination: result.pagination
+  });
 });
 
 /**
@@ -222,5 +222,9 @@ exports.correctAttendance = catchAsync(async (req, res, next) => {
     req
   });
 
-  return sendSuccess(res, updatedRecord, 'Attendance record corrected successfully');
+  return res.status(200).json({
+    success: true,
+    message: 'Attendance record corrected successfully',
+    data: { record: updatedRecord }
+  });
 });

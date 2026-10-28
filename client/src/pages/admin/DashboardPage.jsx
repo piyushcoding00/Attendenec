@@ -57,29 +57,46 @@ const CustomChartTooltip = ({ active, payload, label }) => {
   return null;
 };
 
+const DASHBOARD_CACHE_KEY = 'vorldx_dashboard_summary_cache';
+
+const getCachedDashboard = () => {
+  try {
+    const raw = localStorage.getItem(DASHBOARD_CACHE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) {
+    return null;
+  }
+};
+
 export const DashboardPage = () => {
-  const [data, setData] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [data, setData] = useState(() => getCachedDashboard());
+  const [isLoading, setIsLoading] = useState(() => !getCachedDashboard());
   const [error, setError] = useState(null);
   const [decisionLoading, setDecisionLoading] = useState({});
 
-  const fetchSummary = useCallback(async () => {
-    setIsLoading(true);
+  const fetchSummary = useCallback(async (isSilent = false) => {
+    if (!isSilent && !data) setIsLoading(true);
     setError(null);
     try {
       const res = await dashboardService.getSummary();
-      setData(res.data || res);
+      const payload = res.data || res;
+      setData(payload);
+      try {
+        localStorage.setItem(DASHBOARD_CACHE_KEY, JSON.stringify(payload));
+      } catch (saveErr) {}
     } catch (err) {
       console.error('Error fetching dashboard summary:', err);
-      setError(err.message || 'Failed to load dashboard overview');
+      if (!data) {
+        setError(err.message || 'Failed to load dashboard overview');
+      }
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [data]);
 
   useEffect(() => {
-    fetchSummary();
-  }, [fetchSummary]);
+    fetchSummary(Boolean(data));
+  }, []);
 
   // Inline decision handler for recent WFH items
   const handleQuickDecision = async (requestId, status) => {
@@ -90,7 +107,7 @@ export const DashboardPage = () => {
         reviewComment: `Reviewed from dashboard as ${status}`,
       });
       // Refetch summary to update stats & list
-      await fetchSummary();
+      await fetchSummary(true);
     } catch (err) {
       alert(err.message || `Failed to ${status} request`);
     } finally {
@@ -98,16 +115,25 @@ export const DashboardPage = () => {
     }
   };
 
-  if (isLoading) {
+  if (isLoading && !data) {
     return (
-      <div className="py-24">
-        <LoadingSpinner size="lg" message="Loading dashboard metrics..." />
+      <div className="min-w-0 space-y-5 sm:space-y-6 animate-pulse">
+        <div className="h-28 rounded-2xl bg-white/5 border border-white/10" />
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 xl:grid-cols-5">
+          {[1, 2, 3, 4, 5].map((i) => (
+            <div key={i} className="h-24 rounded-2xl bg-white/5 border border-white/10" />
+          ))}
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+          <div className="h-72 lg:col-span-2 rounded-2xl bg-white/5 border border-white/10" />
+          <div className="h-72 rounded-2xl bg-white/5 border border-white/10" />
+        </div>
       </div>
     );
   }
 
-  if (error) {
-    return <ErrorState message={error} onRetry={fetchSummary} />;
+  if (error && !data) {
+    return <ErrorState message={error} onRetry={() => fetchSummary(false)} />;
   }
 
   const { overview = {}, deptAttendance = [], attendanceTrend = [], recentActivity = [], recentWFH = [] } =

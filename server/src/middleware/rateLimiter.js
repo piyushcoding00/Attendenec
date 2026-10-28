@@ -5,7 +5,7 @@ const rateLimit = require('express-rate-limit');
  */
 const loginLimiter = rateLimit({
   windowMs: 1 * 60 * 1000, // 1 minute
-  max: 100, // 100 attempts per minute
+  max: 500, // 500 attempts per minute
   standardHeaders: true,
   legacyHeaders: false,
   message: {
@@ -44,7 +44,7 @@ const qrScanLimiter = rateLimit({
 
 const qrTokenIssueLimiter = rateLimit({
   windowMs: 1 * 60 * 1000,
-  max: 60,
+  max: 300,
   standardHeaders: true,
   legacyHeaders: false,
   message: {
@@ -58,7 +58,7 @@ const qrTokenIssueLimiter = rateLimit({
  */
 const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100,
+  max: 10000,
   standardHeaders: true,
   legacyHeaders: false,
   message: {

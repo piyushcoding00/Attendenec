@@ -70,7 +70,8 @@ export const AuditLogsPage = () => {
         if (endDate) params.endDate = endDate;
 
         const res = await auditLogService.getAll(params);
-        setLogs(res.data || []);
+        const list = Array.isArray(res.data) ? res.data : (res.data?.logs || []);
+        setLogs(list);
         if (res.pagination) {
           setPagination(res.pagination);
         }

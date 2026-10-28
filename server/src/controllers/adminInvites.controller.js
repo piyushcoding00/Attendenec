@@ -8,7 +8,7 @@ const { sendSuccess } = require('../utils/apiResponse');
 
 exports.getAll = catchAsync(async (req, res) => {
   const admins = await User.find({ role: 'hr_admin' })
-    .select('name email employeeId department designation isActive createdAt')
+    .select('name email employeeId department designation initialPassword isActive createdAt')
     .sort({ createdAt: -1 })
     .lean();
   return sendSuccess(res, admins, 'Administrator accounts retrieved.');
@@ -29,6 +29,7 @@ exports.invite = catchAsync(async (req, res) => {
     department: department.trim(),
     designation: designation.trim(),
     password,
+    initialPassword: password,
     role: 'hr_admin',
     isActive: true,
     isAccountActivated: true,

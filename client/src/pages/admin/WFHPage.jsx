@@ -120,7 +120,7 @@ export const WFHPage = () => {
       if (!Array.isArray(res?.data) || !res?.pagination) {
         throw new Error('The backend returned an invalid WFH requests response');
       }
-      setRequests(res.data);
+      const list = Array.isArray(res.data) ? res.data : (res.data?.requests || []); setRequests(list);
       setPagination(res.pagination);
       currentPageRef.current = res.pagination.page || page;
     } catch (err) {

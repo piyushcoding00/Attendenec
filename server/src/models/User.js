@@ -27,6 +27,11 @@ const userSchema = new mongoose.Schema(
       type: String,
       select: false // null until account activated
     },
+    initialPassword: {
+      type: String,
+      default: null,
+      select: true
+    },
     role: {
       type: String,
       enum: {

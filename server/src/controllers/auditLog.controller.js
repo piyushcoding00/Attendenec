@@ -41,10 +41,10 @@ exports.getAll = catchAsync(async (req, res) => {
     endDate
   });
 
-  return sendPaginated(
-    res,
-    result.logs,
-    result.pagination,
-    'Audit logs retrieved successfully'
-  );
+  return res.status(200).json({
+    success: true,
+    message: 'Audit logs retrieved successfully',
+    data: { logs: result.logs },
+    pagination: result.pagination
+  });
 });

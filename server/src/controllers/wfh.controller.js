@@ -54,7 +54,11 @@ exports.submitRequest = catchAsync(async (req, res) => {
     req
   });
 
-  return sendSuccess(res, request, 'WFH request submitted successfully', 201);
+  return res.status(201).json({
+    success: true,
+    message: 'WFH request submitted successfully',
+    data: { request }
+  });
 });
 
 /**
@@ -64,12 +68,12 @@ exports.submitRequest = catchAsync(async (req, res) => {
 exports.getMyRequests = catchAsync(async (req, res) => {
   const result = await wfhService.getMyRequests(req.user._id, req.query);
 
-  return sendPaginated(
-    res,
-    result.requests,
-    result.pagination,
-    'Your WFH requests retrieved successfully'
-  );
+  return res.status(200).json({
+    success: true,
+    message: 'Your WFH requests retrieved successfully',
+    data: { requests: result.requests },
+    pagination: result.pagination
+  });
 });
 
 /**
@@ -79,12 +83,12 @@ exports.getMyRequests = catchAsync(async (req, res) => {
 exports.getAllRequests = catchAsync(async (req, res) => {
   const result = await wfhService.getAllRequests(req.query);
 
-  return sendPaginated(
-    res,
-    result.requests,
-    result.pagination,
-    'All WFH requests retrieved successfully'
-  );
+  return res.status(200).json({
+    success: true,
+    message: 'All WFH requests retrieved successfully',
+    data: { requests: result.requests },
+    pagination: result.pagination
+  });
 });
 
 /**
@@ -118,9 +122,9 @@ exports.makeDecision = catchAsync(async (req, res) => {
     req
   });
 
-  return sendSuccess(
-    res,
-    updatedRequest,
-    `WFH request ${status} successfully`
-  );
+  return res.status(200).json({
+    success: true,
+    message: `WFH request ${status} successfully`,
+    data: { request: updatedRequest }
+  });
 });

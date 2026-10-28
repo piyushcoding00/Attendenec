@@ -34,7 +34,15 @@ api.interceptors.response.use(
         window.dispatchEvent(new Event('auth:unauthorized'));
       }
     }
-    return Promise.reject(error.response?.data || error.message || error);
+    const errData = error.response?.data;
+    if (errData) {
+      let formattedMsg = errData.message;
+      if (errData.errors && Array.isArray(errData.errors) && errData.errors.length > 0) {
+        formattedMsg = errData.errors.map((e) => e.message || `${e.field}: invalid value`).join('. ');
+      }
+      return Promise.reject(new Error(formattedMsg || 'An error occurred'));
+    }
+    return Promise.reject(new Error(error.message || 'Network error occurred'));
   }
 );
 

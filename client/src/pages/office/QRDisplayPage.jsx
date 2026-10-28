@@ -15,6 +15,8 @@ import {
   UnlockKeyhole,
   Maximize,
   Minimize,
+  ArrowLeft,
+  LayoutDashboard,
 } from 'lucide-react';
 import { qrDisplayService } from '../../services/api';
 import Button from '../../components/ui/Button';
@@ -30,7 +32,7 @@ export const QRDisplayPage = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [countdown, setCountdown] = useState(30);
-  const [isKioskStarted, setIsKioskStarted] = useState(false);
+  const [isKioskStarted, setIsKioskStarted] = useState(true);
   const [cameraStatus, setCameraStatus] = useState('Not started');
   const [connectionStatus, setConnectionStatus] = useState('Offline');
   const [pendingCapture, setPendingCapture] = useState(null);
@@ -39,10 +41,14 @@ export const QRDisplayPage = () => {
   const [officeName, setOfficeName] = useState('');
   const [displayLocation, setDisplayLocation] = useState('');
   const [isKioskLocked, setIsKioskLocked] = useState(false);
-  const [isKioskStateLoading, setIsKioskStateLoading] = useState(Boolean(displayId));
+  const [isKioskStateLoading, setIsKioskStateLoading] = useState(false);
   const [isLockUpdating, setIsLockUpdating] = useState(false);
   const [unlockPassword, setUnlockPassword] = useState('');
   const [showUnlockForm, setShowUnlockForm] = useState(false);
+  const [showAdminExitForm, setShowAdminExitForm] = useState(false);
+  const [adminExitPassword, setAdminExitPassword] = useState('');
+  const [adminExitError, setAdminExitError] = useState(null);
+  const [isAdminVerifying, setIsAdminVerifying] = useState(false);
 
   // Live Clock
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -103,31 +109,88 @@ export const QRDisplayPage = () => {
     const preventBackNavigation = () => {
       window.history.pushState({ kioskLocked: true }, '', window.location.href);
     };
+    const preventUnload = (e) => {
+      e.preventDefault();
+      e.returnValue = 'Kiosk is locked. Enter admin password to exit.';
+      return e.returnValue;
+    };
     preventBackNavigation();
     window.addEventListener('popstate', preventBackNavigation);
-    return () => window.removeEventListener('popstate', preventBackNavigation);
+    window.addEventListener('beforeunload', preventUnload);
+    return () => {
+      window.removeEventListener('popstate', preventBackNavigation);
+      window.removeEventListener('beforeunload', preventUnload);
+    };
   }, [isKioskLocked]);
+
+  const handleAdminExit = async (e) => {
+    e.preventDefault();
+    if (!adminExitPassword) return;
+    setIsAdminVerifying(true);
+    setAdminExitError(null);
+    try {
+      // Verify password via kiosk-lock unlock verification logic or standard auth
+      await qrDisplayService.updateKioskLock(displayId, false, adminExitPassword);
+      setShowAdminExitForm(false);
+      setAdminExitPassword('');
+      navigate('/admin/qr-displays');
+    } catch (err) {
+      setAdminExitError(err.message || 'Incorrect admin password. Access denied.');
+    } finally {
+      setIsAdminVerifying(false);
+    }
+  };
 
   const updateKioskLock = async (isLocked, password = '') => {
     setIsLockUpdating(true);
     setError(null);
+
+    // 1. Instant optimistic state update: immediately lock screen & close forms
+    if (isLocked) {
+      setIsKioskLocked(true);
+      setShowUnlockForm(false);
+      try {
+        const docEl = document.documentElement;
+        if (docEl.requestFullscreen) {
+          docEl.requestFullscreen().catch(() => {});
+        } else if (docEl.webkitRequestFullscreen) {
+          docEl.webkitRequestFullscreen().catch(() => {});
+        } else if (docEl.msRequestFullscreen) {
+          docEl.msRequestFullscreen().catch(() => {});
+        }
+      } catch (fsErr) {
+        console.warn('Fullscreen request error:', fsErr);
+      }
+    }
+
     try {
+      // 2. Sync lock state with backend
       const response = await qrDisplayService.updateKioskLock(displayId, isLocked, password);
       const data = response.data || response;
-      setIsKioskLocked(Boolean(data.isKioskLocked));
+      const locked = Boolean(data.isKioskLocked ?? isLocked);
+      setIsKioskLocked(locked);
       setShowUnlockForm(false);
       setUnlockPassword('');
-      if (isLocked && document.documentElement.requestFullscreen) {
+
+      if (!locked) {
         try {
-          await document.documentElement.requestFullscreen();
-        } catch {
-          setError('Kiosk is locked, but full-screen mode was blocked by the browser. Enable browser/OS kiosk mode for stronger protection.');
+          if (document.fullscreenElement && document.exitFullscreen) {
+            document.exitFullscreen().catch(() => {});
+          }
+        } catch (exitErr) {
+          console.warn('Exit fullscreen error:', exitErr);
         }
-      } else if (!isLocked && document.fullscreenElement && document.exitFullscreen) {
-        await document.exitFullscreen();
       }
     } catch (lockError) {
-      setError(lockError.message || 'Unable to update kiosk lock state.');
+      if (!isLocked) {
+        // If unlocking failed (wrong admin password), keep locked and show error
+        setIsKioskLocked(true);
+        setError(lockError.message || 'Admin password is incorrect. The kiosk remains locked.');
+      } else {
+        console.warn('Backend lock update warning:', lockError);
+        // Still keep UI locked locally even if network has delay
+        setIsKioskLocked(true);
+      }
     } finally {
       setIsLockUpdating(false);
     }
@@ -151,57 +214,62 @@ export const QRDisplayPage = () => {
     }
   }, []);
 
-  const startKiosk = async () => {
-    if (!navigator.mediaDevices?.getUserMedia) {
-      setCameraStatus('Unsupported');
-      setError('This browser does not support tablet camera capture. Use a current browser over HTTPS.');
-      return;
-    }
-    try {
-      setError(null);
-      setCameraStatus('Requesting permission');
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: 'user' }, width: { ideal: 640 }, height: { ideal: 480 } },
-        audio: false,
-      });
-      cameraStreamRef.current = stream;
-      stream.getVideoTracks().forEach((track) => {
-        track.addEventListener('ended', () => {
-          setCameraStatus('Interrupted');
-          setConnectionStatus('Offline');
-          setError('Tablet camera stream was interrupted. Restart the kiosk before accepting attendance.');
-          setQrImageDataUrl('');
-          setIsKioskStarted(false);
-          cameraStreamRef.current?.getTracks().forEach((activeTrack) => activeTrack.stop());
-          cameraStreamRef.current = null;
-        });
-      });
-      setCameraStatus('Initializing');
-      setConnectionStatus('Connecting');
-      setIsKioskStarted(true);
-    } catch (cameraError) {
-      setCameraStatus('Unavailable');
-      setError(cameraError.message || 'Tablet camera permission was denied or the camera is unavailable.');
-      if (cameraStreamRef.current) {
-        cameraStreamRef.current.getTracks().forEach((track) => track.stop());
-        cameraStreamRef.current = null;
-      }
-    }
+  const startKiosk = () => {
+    setError(null);
+    setCameraStatus('Ready');
+    setConnectionStatus('Connected');
+    setIsKioskStarted(true);
   };
 
+  // Open camera ONLY when pendingCapture arrives (after employee verifies QR)
   useEffect(() => {
-    if (!isKioskStarted || !cameraStreamRef.current || !videoRef.current) return;
-    videoRef.current.srcObject = cameraStreamRef.current;
-    videoRef.current.play().then(() => {
-      setCameraStatus('Ready');
-    }).catch((playError) => {
-      setCameraStatus('Unavailable');
-      setError(playError.message || 'The tablet camera preview could not start.');
-      setIsKioskStarted(false);
-      cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
-      cameraStreamRef.current = null;
-    });
-  }, [isKioskStarted]);
+    let active = true;
+    if (!pendingCapture || !isKioskStarted) {
+      if (cameraStreamRef.current) {
+        cameraStreamRef.current.getTracks().forEach((t) => t.stop());
+        cameraStreamRef.current = null;
+      }
+      return undefined;
+    }
+
+    const openCameraForCapture = async () => {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setError('Camera not supported in this browser.');
+        return;
+      }
+      try {
+        setCameraStatus('Opening camera');
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: 'user' }, width: { ideal: 640 }, height: { ideal: 480 } },
+          audio: false,
+        });
+        if (!active) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+        cameraStreamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          await videoRef.current.play().catch(() => {});
+        }
+        setCameraStatus('Ready');
+      } catch (camErr) {
+        if (!active) return;
+        setCameraStatus('Unavailable');
+        setError('Camera permission denied or camera unavailable.');
+      }
+    };
+
+    openCameraForCapture();
+
+    return () => {
+      active = false;
+      if (cameraStreamRef.current) {
+        cameraStreamRef.current.getTracks().forEach((t) => t.stop());
+        cameraStreamRef.current = null;
+      }
+    };
+  }, [pendingCapture, isKioskStarted]);
 
   // Fetch Token Function
   const fetchNewToken = async (idToFetch) => {
@@ -349,6 +417,10 @@ export const QRDisplayPage = () => {
         await qrDisplayService.submitCapture(displayId, pendingCapture.id, photo);
         if (!active) return;
         setCaptureStatus(`Attendance saved for ${pendingCapture.employee?.name || 'employee'}`);
+        if (cameraStreamRef.current) {
+          cameraStreamRef.current.getTracks().forEach((t) => t.stop());
+          cameraStreamRef.current = null;
+        }
         pendingCaptureRef.current = null;
         setPendingCapture(null);
         setCountdown(0);
@@ -438,6 +510,23 @@ export const QRDisplayPage = () => {
       {/* TOP HEADER */}
       <header className="w-full max-w-4xl flex items-center justify-between z-10">
         <div className="flex items-center space-x-3.5">
+          {/* Back to Admin Dashboard Button (Available whenever Kiosk is Unlocked) */}
+          {!isKioskLocked && (
+            <button
+              type="button"
+              onClick={() => {
+                setAdminExitError(null);
+                setAdminExitPassword('');
+                setShowAdminExitForm(true);
+              }}
+              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-navy-900 border border-white/10 text-gray-300 hover:text-white hover:bg-white/10 hover:border-cyan-500/40 transition-all text-xs font-semibold shadow-lg group mr-1 cursor-pointer active:scale-95"
+              title="Enter Admin Password to return to Admin Portal"
+            >
+              <ArrowLeft className="w-4 h-4 text-cyan-400 group-hover:-translate-x-0.5 transition-transform" />
+              <span>Back to Admin</span>
+            </button>
+          )}
+
           <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-primary-600 to-cyan-400 flex items-center justify-center font-black text-white text-xl shadow-glow">
             VX
           </div>
@@ -477,12 +566,12 @@ export const QRDisplayPage = () => {
 
           <div
             className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-full border text-xs font-semibold ${
-              connectionStatus === 'Connected' && cameraStatus === 'Ready' && Boolean(qrImageDataUrl) && !error
+              Boolean(qrImageDataUrl) && !error
                 ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
                 : 'bg-red-500/15 text-red-400 border-red-500/30'
             }`}
           >
-            {connectionStatus === 'Connected' && cameraStatus === 'Ready' && qrImageDataUrl && !error ? (
+            {qrImageDataUrl && !error ? (
               <>
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                 <span>ONLINE</span>
@@ -518,23 +607,7 @@ export const QRDisplayPage = () => {
             </p>
           </div>
 
-          {isKioskLocked && (
-            <div className="w-full flex items-center justify-between gap-3 rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-3 text-left">
-              <div className="flex items-center gap-2 text-sm font-semibold text-emerald-200">
-                <LockKeyhole className="h-4 w-4 shrink-0" />
-                <span>Kiosk locked · QR keeps rotating</span>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={isLockUpdating}
-                onClick={() => setShowUnlockForm(true)}
-              >
-                <UnlockKeyhole className="mr-2 h-4 w-4" />
-                Unlock
-              </Button>
-            </div>
-          )}
+          
 
           {!isKioskStarted ? (
             <div className="w-full space-y-4 rounded-2xl border border-white/10 bg-navy-950 p-6">
@@ -544,97 +617,137 @@ export const QRDisplayPage = () => {
                 <Camera className="mr-2 h-4 w-4" />
                 Start Attendance
               </Button>
-              {error && <p className="text-xs text-red-300">{error}</p>}
+              {error && (
+              <div className="p-2.5 rounded-xl bg-red-500/10 border border-red-500/30 text-xs text-red-300 font-medium">
+                {error}
+              </div>
+            )}
             </div>
           ) : (
           <>
-          <div className="w-full flex flex-col sm:flex-row items-center justify-between gap-3 rounded-xl border border-white/10 bg-navy-950/80 px-4 py-3">
-            <div className="flex items-center gap-2 text-left">
-              {isKioskLocked ? (
-                <LockKeyhole className="h-4 w-4 text-emerald-300" />
-              ) : (
-                <UnlockKeyhole className="h-4 w-4 text-amber-300" />
-              )}
+          <div className={`w-full flex flex-col sm:flex-row items-center justify-between gap-3 rounded-2xl border px-5 py-3.5 transition-all duration-300 ${
+            isKioskLocked
+              ? 'border-emerald-500/30 bg-emerald-950/30 shadow-lg'
+              : 'border-white/10 bg-navy-950/90'
+          }`}>
+            <div className="flex items-center gap-3 text-left">
+              <div className={`p-2 rounded-xl ${isKioskLocked ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'}`}>
+                {isKioskLocked ? (
+                  <LockKeyhole className="h-5 w-5" />
+                ) : (
+                  <UnlockKeyhole className="h-5 w-5" />
+                )}
+              </div>
               <div>
-                <p className="text-sm font-semibold text-white">
-                  {isKioskLocked ? 'Attendance kiosk is locked' : 'Kiosk is not locked'}
+                <p className="text-sm font-bold text-white flex items-center gap-2">
+                  {isKioskLocked ? 'Kiosk is Locked' : 'Kiosk is not locked'}
+                  {isKioskLocked && (
+                    <span className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                      Protected
+                    </span>
+                  )}
                 </p>
                 <p className="text-xs text-gray-400">
-                  {isKioskLocked ? 'Employees can scan; this tablet stays on the rotating QR.' : 'Lock this screen to enable employee attendance scans.'}
+                  {isKioskLocked
+                    ? 'Screen is locked. Only Admin can unlock with password.'
+                    : 'Lock this screen to go full-screen and secure attendance scans.'}
                 </p>
               </div>
             </div>
-            {!isKioskLocked && (
-              <Button
-                variant="primary"
-                size="sm"
-                disabled={isLockUpdating || isKioskStateLoading || cameraStatus !== 'Ready'}
-                onClick={() => updateKioskLock(true)}
+            {isKioskLocked ? (
+              <button
+                type="button"
+                disabled={isLockUpdating}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setError(null);
+                  setShowUnlockForm(true);
+                }}
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-emerald-500/40 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 text-xs font-bold transition-all active:scale-95 cursor-pointer disabled:opacity-50"
               >
-                <LockKeyhole className="mr-2 h-4 w-4" />
-                {isLockUpdating ? 'Locking…' : 'Lock Kiosk'}
-              </Button>
-            )}
-          </div>
-          <div className="grid w-full items-center gap-6 md:grid-cols-2">
-          <div className="flex flex-col items-center gap-4">
-          {/* QR Code Frame with White Background */}
-          <div className="relative p-5 bg-white rounded-3xl shadow-glow transition-all duration-300">
-            {qrImageDataUrl && !error ? (
-              <img
-                src={qrImageDataUrl}
-                alt="Dynamic Office Attendance QR Code"
-                className="w-64 h-64 sm:w-72 sm:h-72 object-contain rounded-xl select-none"
-                draggable={false}
-              />
-            ) : isLoading || connectionStatus !== 'Connected' || cameraStatus !== 'Ready' ? (
-              <div className="w-64 h-64 sm:w-72 sm:h-72 flex flex-col items-center justify-center bg-white rounded-xl space-y-3">
-                <div className="w-10 h-10 border-4 border-primary-500/20 border-t-primary-500 rounded-full animate-spin" />
-                <span className="text-xs font-bold text-navy-900">
-                  Generating Secure QR...
-                </span>
-              </div>
+                <UnlockKeyhole className="h-4 w-4" />
+                <span>Unlock Kiosk</span>
+              </button>
             ) : (
-              <div className="w-64 h-64 sm:w-72 sm:h-72 flex flex-col items-center justify-center bg-slate-100 rounded-xl p-4 text-center space-y-3">
-                <AlertTriangle className="w-8 h-8 text-red-500" />
-                <p className="text-xs text-red-600 font-semibold">{error}</p>
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={() => fetchNewToken(displayId)}
-                >
-                  Reconnect
-                </Button>
-              </div>
+              <button
+                type="button"
+                disabled={isLockUpdating}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  updateKioskLock(true);
+                }}
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-primary-600 hover:from-cyan-400 hover:to-primary-500 text-white font-bold text-xs shadow-glow transition-all active:scale-95 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <LockKeyhole className="h-4 w-4" />
+                <span>{isLockUpdating ? 'Locking…' : 'Lock Kiosk'}</span>
+              </button>
             )}
           </div>
+          {/* STEP 1: ONLY QR CODE DISPLAY (When waiting for employee scan) */}
+          {!pendingCapture ? (
+            <div className="flex flex-col items-center justify-center w-full max-w-md mx-auto py-2 space-y-4">
+              <div className="relative p-6 sm:p-7 bg-white rounded-3xl shadow-glow transition-all duration-300 transform hover:scale-[1.01]">
+                {qrImageDataUrl && !error ? (
+                  <img
+                    src={qrImageDataUrl}
+                    alt="Dynamic Office Attendance QR Code"
+                    className="w-72 h-72 sm:w-80 sm:h-80 object-contain rounded-2xl select-none"
+                    draggable={false}
+                  />
+                ) : isLoading || connectionStatus !== 'Connected' || cameraStatus !== 'Ready' ? (
+                  <div className="w-72 h-72 sm:w-80 sm:h-80 flex flex-col items-center justify-center bg-white rounded-2xl space-y-3">
+                    <div className="w-12 h-12 border-4 border-cyan-500/20 border-t-cyan-500 rounded-full animate-spin" />
+                    <span className="text-xs font-bold text-navy-900 tracking-wide uppercase">
+                      Generating Secure QR...
+                    </span>
+                  </div>
+                ) : (
+                  <div className="w-72 h-72 sm:w-80 sm:h-80 flex flex-col items-center justify-center bg-slate-100 rounded-2xl p-4 text-center space-y-3">
+                    <AlertTriangle className="w-10 h-10 text-red-500" />
+                    <p className="text-xs text-red-600 font-semibold">{error}</p>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onClick={() => fetchNewToken(displayId)}
+                    >
+                      Reconnect
+                    </Button>
+                  </div>
+                )}
+              </div>
 
-          {/* Dynamic Refresh Countdown Pill */}
-          <div className="flex items-center space-x-2 text-xs font-semibold text-cyan-400 bg-cyan-950/40 border border-cyan-500/20 px-4 py-2 rounded-full">
-            <RefreshCw
-              className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`}
-            />
-            <span>⟳ Refreshes in {countdown}s</span>
-          </div>
-          </div>
-          <div className="w-full overflow-hidden rounded-xl border border-white/10 bg-black">
-            <video
-              ref={videoRef}
-              autoPlay
-              playsInline
-              muted
-              className="aspect-video w-full object-cover"
-              aria-label="Live office tablet camera preview"
-            />
-            <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-xs text-gray-300">
-              <span className="flex items-center gap-2">
-                {cameraStatus === 'Ready' ? <Camera className="h-4 w-4 text-emerald-400" /> : <CameraOff className="h-4 w-4 text-amber-400" />}
-                Camera: {cameraStatus}
-              </span>
-              <span>{captureStatus}</span>
+              {/* Dynamic Refresh Countdown Pill */}
+              <div className="flex items-center space-x-2 text-xs font-semibold text-cyan-400 bg-cyan-950/60 border border-cyan-500/30 px-5 py-2.5 rounded-full shadow-lg">
+                <RefreshCw
+                  className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`}
+                />
+                <span className="tracking-wide">Auto-Refreshes in {countdown}s</span>
+              </div>
             </div>
-          </div>
-          </div>
+          ) : (
+            /* STEP 2: CAMERA CAPTURE STEP (Opens automatically only AFTER employee scans QR) */
+            <div className="w-full max-w-lg mx-auto space-y-4 animate-fade-in">
+              <div className="w-full overflow-hidden rounded-2xl border-2 border-cyan-400/50 bg-black shadow-2xl relative">
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className="aspect-video w-full object-cover"
+                  aria-label="Live office tablet camera preview"
+                />
+                {/* Visual capture overlay */}
+                <div className="absolute inset-0 border-2 border-cyan-400/40 rounded-2xl pointer-events-none animate-pulse" />
+                <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 bg-navy-950/90 text-xs text-gray-200 border-t border-white/10">
+                  <span className="flex items-center gap-2 font-medium">
+                    <Camera className="h-4 w-4 text-cyan-400 animate-pulse" />
+                    Capturing Attendance Selfie
+                  </span>
+                  <span className="font-semibold text-emerald-400">{captureStatus}</span>
+                </div>
+              </div>
+            </div>
+          )}
           {pendingCapture && (
             <div className="w-full rounded-xl border border-cyan-400/30 bg-cyan-400/10 px-4 py-3 text-left">
               <p className="text-sm font-bold text-white">{captureStatus}</p>
@@ -653,6 +766,63 @@ export const QRDisplayPage = () => {
         </div>
       </main>
 
+      {/* Modal 1: Back to Admin Exit Verification Modal */}
+      {showAdminExitForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in">
+          <form
+            onSubmit={handleAdminExit}
+            className="w-full max-w-sm space-y-4 rounded-2xl border border-white/10 bg-navy-900 p-6 shadow-2xl"
+          >
+            <div>
+              <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                <LockKeyhole className="w-5 h-5 text-cyan-400" />
+                Admin Authentication
+              </h2>
+              <p className="mt-1 text-xs text-gray-400">
+                Enter your Admin password to exit kiosk and return to Admin Dashboard.
+              </p>
+            </div>
+            <input
+              type="password"
+              autoComplete="current-password"
+              value={adminExitPassword}
+              onChange={(e) => setAdminExitPassword(e.target.value)}
+              required
+              autoFocus
+              placeholder="Enter Admin Password"
+              className="w-full rounded-xl border border-white/10 bg-navy-950 px-4 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-400"
+            />
+            {adminExitError && (
+              <p className="text-xs text-red-300 font-medium">{adminExitError}</p>
+            )}
+            <div className="flex gap-3 pt-1">
+              <Button
+                type="button"
+                variant="ghost"
+                className="flex-1"
+                disabled={isAdminVerifying}
+                onClick={() => {
+                  setShowAdminExitForm(false);
+                  setAdminExitPassword('');
+                  setAdminExitError(null);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                variant="primary"
+                className="flex-1 font-bold"
+                disabled={isAdminVerifying || !adminExitPassword}
+              >
+                {isAdminVerifying ? 'Verifying…' : 'Authenticate'}
+              </Button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Modal 2: Unlock Kiosk Modal */}
       {showUnlockForm && (
         <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/75 p-4">
           <form

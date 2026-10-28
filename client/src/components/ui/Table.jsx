@@ -8,6 +8,17 @@ export const Table = ({
   className = '',
   onRowClick,
 }) => {
+  const safeData = Array.isArray(data)
+    ? data
+    : Array.isArray(data?.logs)
+    ? data.logs
+    : Array.isArray(data?.employees)
+    ? data.employees
+    : Array.isArray(data?.records)
+    ? data.records
+    : Array.isArray(data?.requests)
+    ? data.requests
+    : [];
   return (
     <div className={`table-scroll rounded-xl border border-white/10 ${className}`}>
       <table className="w-full text-left text-sm text-gray-300">
@@ -36,7 +47,7 @@ export const Table = ({
                 ))}
               </tr>
             ))
-          ) : data.length === 0 ? (
+          ) : safeData.length === 0 ? (
             <tr>
               <td
                 colSpan={columns.length}
@@ -46,7 +57,7 @@ export const Table = ({
               </td>
             </tr>
           ) : (
-            data.map((row, index) => (
+            safeData.map((row, index) => (
               <tr
                 key={row._id || row.id || index}
                 onClick={() => onRowClick && onRowClick(row)}

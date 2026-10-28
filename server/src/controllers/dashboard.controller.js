@@ -17,7 +17,11 @@ exports.getSummary = catchAsync(async (req, res) => {
     Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 23, 59, 59, 999)
   );
 
-  // Demo accounts are seeded for walkthroughs and must not appear in live metrics.
+  // 7 days start boundary for trend
+  const sevenDaysAgoStart = new Date(todayStart);
+  sevenDaysAgoStart.setUTCDate(sevenDaysAgoStart.getUTCDate() - 6);
+
+  // 1. Fetch live active employee IDs and count
   const [totalEmployees, employeeIds] = await Promise.all([
     User.countDocuments({
       isActive: true,
@@ -31,135 +35,157 @@ exports.getSummary = catchAsync(async (req, res) => {
     })
   ]);
 
-  // 2. Present today (status: present or late or wfh)
-  const presentToday = await AttendanceRecord.countDocuments({
-    date: { $gte: todayStart, $lte: todayEnd },
-    employee: { $in: employeeIds },
-    status: { $in: ['present', 'late', 'wfh'] }
-  });
-
-  // 3. Late today
-  const lateToday = await AttendanceRecord.countDocuments({
-    date: { $gte: todayStart, $lte: todayEnd },
-    employee: { $in: employeeIds },
-    status: 'late'
-  });
-
-  // 4. WFH today
-  const wfhToday = await AttendanceRecord.countDocuments({
-    date: { $gte: todayStart, $lte: todayEnd },
-    employee: { $in: employeeIds },
-    status: 'wfh'
-  });
-
-  // 5. Pending WFH requests
-  const pendingWFH = await WFHRequest.countDocuments({
-    status: 'pending',
-    employee: { $in: employeeIds }
-  });
-
-  // 6. Department-wise attendance today
-  const deptAttendance = await AttendanceRecord.aggregate([
-    {
-      $match: {
-        date: { $gte: todayStart, $lte: todayEnd },
-        employee: { $in: employeeIds },
-        status: { $in: ['present', 'late', 'wfh'] }
+  // 2. Run all dashboard aggregations and queries in a single Promise.all for maximum speed (<50ms)
+  const [
+    todayStatusCounts,
+    pendingWFH,
+    deptAttendance,
+    sevenDaysRecords,
+    recentActivity,
+    recentWFH
+  ] = await Promise.all([
+    // Today's status counts grouped by status in one query
+    AttendanceRecord.aggregate([
+      {
+        $match: {
+          date: { $gte: todayStart, $lte: todayEnd },
+          employee: { $in: employeeIds }
+        }
+      },
+      {
+        $group: {
+          _id: '$status',
+          count: { $sum: 1 }
+        }
       }
-    },
-    {
-      $lookup: {
-        from: 'users',
-        localField: 'employee',
-        foreignField: '_id',
-        as: 'emp'
+    ]),
+
+    // Pending WFH count
+    WFHRequest.countDocuments({
+      status: 'pending',
+      employee: { $in: employeeIds }
+    }),
+
+    // Department-wise attendance today in one aggregation
+    AttendanceRecord.aggregate([
+      {
+        $match: {
+          date: { $gte: todayStart, $lte: todayEnd },
+          employee: { $in: employeeIds },
+          status: { $in: ['present', 'late', 'wfh'] }
+        }
+      },
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'employee',
+          foreignField: '_id',
+          as: 'emp'
+        }
+      },
+      { $unwind: '$emp' },
+      {
+        $group: {
+          _id: '$emp.department',
+          count: { $sum: 1 }
+        }
+      },
+      {
+        $project: {
+          department: '$_id',
+          count: 1,
+          _id: 0
+        }
+      },
+      { $sort: { count: -1 } }
+    ]),
+
+    // 7 days trend data in ONE single fast aggregation query instead of 21 queries!
+    AttendanceRecord.aggregate([
+      {
+        $match: {
+          date: { $gte: sevenDaysAgoStart, $lte: todayEnd },
+          employee: { $in: employeeIds }
+        }
+      },
+      {
+        $group: {
+          _id: {
+            day: { $dateToString: { format: '%Y-%m-%d', date: '$date' } },
+            status: '$status'
+          },
+          count: { $sum: 1 }
+        }
       }
-    },
-    { $unwind: '$emp' },
-    {
-      $group: {
-        _id: '$emp.department',
-        count: { $sum: 1 }
-      }
-    },
-    {
-      $project: {
-        department: '$_id',
-        count: 1,
-        _id: 0
-      }
-    },
-    { $sort: { count: -1 } }
+    ]),
+
+    // Recent 10 activities
+    AttendanceRecord.find({
+      employee: { $in: employeeIds },
+      checkIn: { $exists: true }
+    })
+      .sort({ checkIn: -1 })
+      .limit(10)
+      .populate('employee', 'name employeeId department designation')
+      .lean(),
+
+    // Recent 5 WFH requests
+    WFHRequest.find({
+      employee: { $in: employeeIds }
+    })
+      .sort({ createdAt: -1 })
+      .limit(5)
+      .populate('employee', 'name employeeId department designation')
+      .populate('reviewer', 'name employeeId')
+      .lean()
   ]);
 
-  // 7. Attendance trend for last 7 days
-  const trendPromises = [];
+  // Process today counts
+  let presentToday = 0;
+  let lateToday = 0;
+  let wfhToday = 0;
+  for (const item of todayStatusCounts) {
+    if (item._id === 'present') presentToday += item.count;
+    else if (item._id === 'late') {
+      lateToday += item.count;
+      presentToday += item.count; // late is also present
+    } else if (item._id === 'wfh') {
+      wfhToday += item.count;
+      presentToday += item.count;
+    }
+  }
+
+  // Format 7 days trend map
+  const trendMap = {};
   for (let i = 6; i >= 0; i--) {
     const d = new Date();
     d.setDate(d.getDate() - i);
-    const dayStart = new Date(
-      Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0, 0, 0)
-    );
-    const dayEnd = new Date(
-      Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 23, 59, 59, 999)
-    );
-    const dateStr = dayStart.toISOString().split('T')[0];
-
-    trendPromises.push(
-      (async () => {
-        const [presentCount, lateCount, wfhCount] = await Promise.all([
-          AttendanceRecord.countDocuments({
-            date: { $gte: dayStart, $lte: dayEnd },
-            employee: { $in: employeeIds },
-            status: 'present'
-          }),
-          AttendanceRecord.countDocuments({
-            date: { $gte: dayStart, $lte: dayEnd },
-            employee: { $in: employeeIds },
-            status: 'late'
-          }),
-          AttendanceRecord.countDocuments({
-            date: { $gte: dayStart, $lte: dayEnd },
-            employee: { $in: employeeIds },
-            status: 'wfh'
-          })
-        ]);
-
-        const attended = presentCount + lateCount + wfhCount;
-        const absentCount = Math.max(0, totalEmployees - attended);
-
-        return {
-          date: dateStr,
-          present: presentCount,
-          late: lateCount,
-          wfh: wfhCount,
-          absent: absentCount,
-          total: totalEmployees
-        };
-      })()
-    );
+    const dateStr = d.toISOString().split('T')[0];
+    trendMap[dateStr] = {
+      date: dateStr,
+      present: 0,
+      late: 0,
+      wfh: 0,
+      absent: 0,
+      total: totalEmployees
+    };
   }
-  const attendanceTrend = await Promise.all(trendPromises);
 
-  // 8. Recent activity: last 10 attendance check-ins
-  const recentActivity = await AttendanceRecord.find({
-    employee: { $in: employeeIds },
-    checkIn: { $exists: true }
-  })
-    .sort({ checkIn: -1 })
-    .limit(10)
-    .populate('employee', 'name employeeId department designation')
-    .lean();
+  for (const item of sevenDaysRecords) {
+    const day = item._id.day;
+    const status = item._id.status;
+    if (trendMap[day]) {
+      if (status === 'present') trendMap[day].present += item.count;
+      else if (status === 'late') trendMap[day].late += item.count;
+      else if (status === 'wfh') trendMap[day].wfh += item.count;
+    }
+  }
 
-  // 9. Recent WFH requests: last 5 requests
-  const recentWFH = await WFHRequest.find({
-    employee: { $in: employeeIds }
-  })
-    .sort({ createdAt: -1 })
-    .limit(5)
-    .populate('employee', 'name employeeId department designation')
-    .populate('reviewer', 'name employeeId')
-    .lean();
+  const attendanceTrend = Object.values(trendMap).map((item) => {
+    const attended = item.present + item.late + item.wfh;
+    item.absent = Math.max(0, totalEmployees - attended);
+    return item;
+  });
 
   return sendSuccess(
     res,

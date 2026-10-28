@@ -84,7 +84,7 @@ export const AttendanceHistoryPage = () => {
         if (e) params.endDate = e;
 
         const res = await attendanceService.getMyHistory(params);
-        setRecords(res.data || res.records || []);
+        setRecords(res.data?.records || res.records || []);
         if (res.pagination) {
           setPagination(res.pagination);
         }

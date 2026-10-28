@@ -55,7 +55,7 @@ export const HomePage = () => {
 
       const rec = todayRes && 'data' in todayRes ? todayRes.data : todayRes;
       setTodayRecord(rec || null);
-      setHistory(historyRes?.data || historyRes?.records || []);
+      setHistory(historyRes?.data?.records || historyRes?.records || []);
     } catch (err) {
       setError(err.message || 'Unable to load your attendance overview');
     } finally {

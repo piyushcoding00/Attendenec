@@ -74,7 +74,8 @@ export const EmployeesPage = () => {
         if (statusFilter !== '') params.isActive = statusFilter;
 
         const res = await employeeService.getAll(params);
-        setEmployees(res.data || []);
+        const list = Array.isArray(res.data) ? res.data : (res.data?.employees || []);
+        setEmployees(list);
         if (res.pagination) {
           setPagination(res.pagination);
         }
