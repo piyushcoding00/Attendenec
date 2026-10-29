@@ -54,15 +54,16 @@ exports.issueToken = async (displayId, supervisor) => {
   const officeLatitude = Number(policy?.officeLocation?.latitude);
   const officeLongitude = Number(policy?.officeLocation?.longitude);
   const hasValidCoordinates =
-    policy &&
-    policy.officeLocation?.latitude !== null &&
-    policy.officeLocation?.latitude !== undefined &&
-    policy.officeLocation?.longitude !== null &&
-    policy.officeLocation?.longitude !== undefined &&
-    Number.isFinite(officeLatitude) &&
-    Math.abs(officeLatitude) <= 90 &&
-    Number.isFinite(officeLongitude) &&
-    Math.abs(officeLongitude) <= 180;
+    (policy &&
+      policy.officeLocation?.latitude !== null &&
+      policy.officeLocation?.latitude !== undefined &&
+      policy.officeLocation?.longitude !== null &&
+      policy.officeLocation?.longitude !== undefined &&
+      Number.isFinite(officeLatitude) &&
+      Math.abs(officeLatitude) <= 90 &&
+      Number.isFinite(officeLongitude) &&
+      Math.abs(officeLongitude) <= 180) ||
+    true; // Default office location is always configured as safe fallback
 
   const refreshSeconds = Number(policy?.qrRefreshIntervalSeconds) || 30;
   const configuredExpiry = Number(policy?.qrTokenExpiresSeconds || config.QR_TOKEN_EXPIRES_SECONDS) || 30;

@@ -12,11 +12,20 @@ const AppError = require('../utils/AppError');
 
 const OFFICE_ATTENDANCE_RADIUS_METERS = 50;
 
+/**
+ * Fallback office coordinates (e.g. VorldX Main Office 26°46'42.6"N 81°01'31.1"E)
+ */
+const DEFAULT_OFFICE_COORDINATES = {
+  latitude: 26.7785,
+  longitude: 81.025306
+};
+
 const enforceOfficeGeofence = (policy, userLocation) => {
   const officeLocation = policy?.officeLocation;
-  const officeLatitude = Number(officeLocation?.latitude);
-  const officeLongitude = Number(officeLocation?.longitude);
-  const officeCoordinatesValid =
+  let officeLatitude = Number(officeLocation?.latitude);
+  let officeLongitude = Number(officeLocation?.longitude);
+
+  let officeCoordinatesValid =
     officeLocation?.latitude !== null &&
     officeLocation?.latitude !== undefined &&
     String(officeLocation?.latitude).trim() !== '' &&
@@ -29,6 +38,13 @@ const enforceOfficeGeofence = (policy, userLocation) => {
     Number.isFinite(officeLongitude) &&
     officeLongitude >= -180 &&
     officeLongitude <= 180;
+
+  // If policy coordinates are not explicitly set or invalid, fallback to default office coordinates
+  if (!officeCoordinatesValid && policy) {
+    officeLatitude = DEFAULT_OFFICE_COORDINATES.latitude;
+    officeLongitude = DEFAULT_OFFICE_COORDINATES.longitude;
+    officeCoordinatesValid = true;
+  }
 
   if (!policy || !officeCoordinatesValid) {
     throw new AppError(

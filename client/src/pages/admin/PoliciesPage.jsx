@@ -104,11 +104,32 @@ export const PoliciesPage = () => {
   };
 
   /**
-   * Helper to parse coordinates from Google Maps URL or raw coordinates
+   * Helper to parse coordinates from Google Maps URL, DMS notation, or raw coordinates
    */
   const handleParseMapLink = (urlOrCoord) => {
     if (!urlOrCoord || typeof urlOrCoord !== 'string') return;
     const str = urlOrCoord.trim();
+
+    // 0. Matches Degrees Minutes Seconds (DMS) like 26°46'42.6"N 81°01'31.1"E
+    const dmsRegex = /([0-9.]+)[^0-9NSEW]+([0-9.]+)[^0-9NSEW]+([0-9.]+)[^0-9NSEW]*([NSEW])/gi;
+    const dmsMatches = [...str.matchAll(dmsRegex)];
+    if (dmsMatches.length >= 2) {
+      const toDec = (deg, min, sec, dir) => {
+        let dec = parseFloat(deg) + parseFloat(min) / 60 + parseFloat(sec) / 3600;
+        if (/^[SW]$/i.test(dir)) dec = -dec;
+        return dec.toFixed(6);
+      };
+      setFormData((prev) => ({
+        ...prev,
+        officeLocation: {
+          ...prev.officeLocation,
+          latitude: toDec(dmsMatches[0][1], dmsMatches[0][2], dmsMatches[0][3], dmsMatches[0][4]),
+          longitude: toDec(dmsMatches[1][1], dmsMatches[1][2], dmsMatches[1][3], dmsMatches[1][4]),
+          isEnabled: true,
+        },
+      }));
+      return;
+    }
 
     // 1. Matches @28.6139,77.2090 or @28.6139,77.2090,17z
     const atMatch = str.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
