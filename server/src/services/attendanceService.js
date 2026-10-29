@@ -78,7 +78,7 @@ const enforceOfficeGeofence = (policy, userLocation) => {
     );
   }
 
-  const maximumAccuracyMeters = Number(policy.gpsAccuracyThresholdMeters) || 20;
+  const maximumAccuracyMeters = Math.max(Number(policy?.gpsAccuracyThresholdMeters) || 20, 50);
   if (accuracy > maximumAccuracyMeters) {
     throw new AppError(
       `GPS accuracy is too low (±${Math.round(accuracy)}m). The maximum allowed is ±${maximumAccuracyMeters}m. Move to an area with a clearer GPS signal and refresh your location.`,

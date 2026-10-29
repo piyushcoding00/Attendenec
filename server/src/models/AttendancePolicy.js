@@ -25,9 +25,9 @@ const attendancePolicySchema = new mongoose.Schema(
     },
     gpsAccuracyThresholdMeters: {
       type: Number,
-      default: 20,
+      default: 50,
       min: [1, 'GPS accuracy threshold must be at least 1 meter'],
-      max: [50, 'GPS accuracy threshold cannot exceed 50 meters']
+      max: [100, 'GPS accuracy threshold cannot exceed 100 meters']
     },
     wfhEnabled: {
       type: Boolean,

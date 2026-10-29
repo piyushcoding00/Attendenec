@@ -66,7 +66,7 @@ export const ScannerPage = () => {
   const getFreshLocation = () =>
     new Promise((resolve, reject) => {
       if (!navigator.geolocation) {
-        reject(new Error('GPS is not supported in this browser. Use a device with location services enabled.'));
+        reject(new Error('Aapke mobile ya browser mein GPS supported nahi hai. Kripya location service wala device use karein.'));
         return;
       }
 
@@ -79,10 +79,10 @@ export const ScannerPage = () => {
         }),
         (error) => reject(new Error(
           error.code === error.PERMISSION_DENIED
-            ? 'Location permission is blocked. Allow location access in your browser settings, then retry.'
-            : 'Could not get a fresh GPS fix. Move to an area with a clearer signal and retry.'
+            ? 'Mobile Location (GPS) band hai ya permission blocked hai! Kripya apne mobile ka Location ON karein aur browser permission allow karke dobara scan karein.'
+            : 'Mobile GPS fix nahi mil raha hai. Kripya mobile ka Location/GPS ON karein aur dobara scan karein.'
         )),
-        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
       );
     });
 

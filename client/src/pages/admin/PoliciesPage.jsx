@@ -427,7 +427,7 @@ export const PoliciesPage = () => {
               <Input
                 type="number"
                 min="1"
-                max="50"
+                max="100"
                 value={formData.gpsAccuracyThresholdMeters}
                 onChange={(e) =>
                   setFormData({
@@ -438,10 +438,10 @@ export const PoliciesPage = () => {
               />
             ) : (
               <p className="text-base font-semibold text-cyan-400">
-                ±{policy?.gpsAccuracyThresholdMeters || 20}m
+                ±{policy?.gpsAccuracyThresholdMeters || 50}m
               </p>
             )}
-            <p className="text-[11px] text-gray-500 mt-1">GPS fixes less accurate than this are rejected</p>
+            <p className="text-[11px] text-gray-500 mt-1">GPS fixes less accurate than this are rejected (Recommended: 50m for indoor mobile scanning)</p>
           </div>
         </div>
       </Card>

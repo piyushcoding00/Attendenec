@@ -20,8 +20,8 @@ const policyUpdateRules = [
     .withMessage('QR refresh interval must be between 5 and 30 seconds'),
   body('gpsAccuracyThresholdMeters')
     .optional()
-    .isInt({ min: 1, max: 50 })
-    .withMessage('GPS accuracy threshold must be between 1 and 50 meters'),
+    .isInt({ min: 1, max: 100 })
+    .withMessage('GPS accuracy threshold must be between 1 and 100 meters'),
   body('wfhEnabled')
     .optional()
     .isBoolean()
