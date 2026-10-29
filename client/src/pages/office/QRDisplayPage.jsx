@@ -49,6 +49,10 @@ export const QRDisplayPage = () => {
   const [adminExitPassword, setAdminExitPassword] = useState('');
   const [adminExitError, setAdminExitError] = useState(null);
   const [isAdminVerifying, setIsAdminVerifying] = useState(false);
+  const [showFullscreenExitForm, setShowFullscreenExitForm] = useState(false);
+  const [fullscreenExitPassword, setFullscreenExitPassword] = useState('');
+  const [fullscreenExitError, setFullscreenExitError] = useState(null);
+  const [isFullscreenVerifying, setIsFullscreenVerifying] = useState(false);
 
   // Live Clock
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -73,12 +77,35 @@ export const QRDisplayPage = () => {
   const toggleFullscreen = async () => {
     try {
       if (document.fullscreenElement) {
-        await document.exitFullscreen();
+        // If screen is currently fullscreen and user wants to minimize / exit fullscreen, require Admin Password
+        setFullscreenExitError(null);
+        setFullscreenExitPassword('');
+        setShowFullscreenExitForm(true);
       } else if (document.documentElement.requestFullscreen) {
         await document.documentElement.requestFullscreen();
       }
     } catch (fullscreenError) {
       setError(fullscreenError.message || 'Fullscreen mode is not available in this browser.');
+    }
+  };
+
+  const handleFullscreenExit = async (e) => {
+    e.preventDefault();
+    if (!fullscreenExitPassword) return;
+    setIsFullscreenVerifying(true);
+    setFullscreenExitError(null);
+    try {
+      // Verify admin password before minimizing fullscreen
+      await qrDisplayService.updateKioskLock(displayId, false, fullscreenExitPassword);
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+      }
+      setShowFullscreenExitForm(false);
+      setFullscreenExitPassword('');
+    } catch (err) {
+      setFullscreenExitError(err.message || 'Admin password is incorrect. Screen remains fullscreen.');
+    } finally {
+      setIsFullscreenVerifying(false);
     }
   };
 
@@ -816,6 +843,62 @@ export const QRDisplayPage = () => {
                 disabled={isAdminVerifying || !adminExitPassword}
               >
                 {isAdminVerifying ? 'Verifying…' : 'Authenticate'}
+              </Button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Modal 1.5: Minimize / Exit Fullscreen Password Modal */}
+      {showFullscreenExitForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in">
+          <form
+            onSubmit={handleFullscreenExit}
+            className="w-full max-w-sm space-y-4 rounded-2xl border border-white/10 bg-navy-900 p-6 shadow-2xl"
+          >
+            <div>
+              <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                <Minimize className="w-5 h-5 text-cyan-400" />
+                Exit Fullscreen / Minimize
+              </h2>
+              <p className="mt-1 text-xs text-gray-400">
+                Confirm your Admin password to minimize screen and exit fullscreen mode.
+              </p>
+            </div>
+            <input
+              type="password"
+              autoComplete="current-password"
+              value={fullscreenExitPassword}
+              onChange={(e) => setFullscreenExitPassword(e.target.value)}
+              required
+              autoFocus
+              placeholder="Enter Admin Password"
+              className="w-full rounded-xl border border-white/10 bg-navy-950 px-4 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-400"
+            />
+            {fullscreenExitError && (
+              <p className="text-xs text-red-300 font-medium">{fullscreenExitError}</p>
+            )}
+            <div className="flex gap-3 pt-1">
+              <Button
+                type="button"
+                variant="ghost"
+                className="flex-1"
+                disabled={isFullscreenVerifying}
+                onClick={() => {
+                  setShowFullscreenExitForm(false);
+                  setFullscreenExitPassword('');
+                  setFullscreenExitError(null);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                variant="primary"
+                className="flex-1 font-bold"
+                disabled={isFullscreenVerifying || !fullscreenExitPassword}
+              >
+                {isFullscreenVerifying ? 'Verifying…' : 'Minimize'}
               </Button>
             </div>
           </form>
