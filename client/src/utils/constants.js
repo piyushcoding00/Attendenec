@@ -1,4 +1,17 @@
-export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1';
+const formatBaseUrl = (url) => {
+  if (!url) return 'http://localhost:5000/api/v1';
+  let clean = url.trim().replace(/\/+$/, '');
+  if (!clean.endsWith('/api/v1')) {
+    if (clean.endsWith('/api')) {
+      clean += '/v1';
+    } else {
+      clean += '/api/v1';
+    }
+  }
+  return clean;
+};
+
+export const API_URL = formatBaseUrl(import.meta.env.VITE_API_URL);
 export const APP_NAME = import.meta.env.VITE_APP_NAME || 'VorldX Attendance System';
 
 export const ROLES = {

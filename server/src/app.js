@@ -55,8 +55,9 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // Cookie parser for reading JWT from cookies
 app.use(cookieParser());
 
-// Mount API routes under /api/v1
+// Mount API routes under /api/v1 as well as direct fallback
 app.use('/api/v1', routes);
+app.use(routes);
 
 // Handle undefined routes (404)
 app.all('*', (req, res, next) => {
