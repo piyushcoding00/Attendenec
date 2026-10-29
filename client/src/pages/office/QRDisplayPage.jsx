@@ -33,8 +33,8 @@ export const QRDisplayPage = () => {
   const [error, setError] = useState(null);
   const [countdown, setCountdown] = useState(30);
   const [isKioskStarted, setIsKioskStarted] = useState(true);
-  const [cameraStatus, setCameraStatus] = useState('Not started');
-  const [connectionStatus, setConnectionStatus] = useState('Offline');
+  const [cameraStatus, setCameraStatus] = useState('Ready');
+  const [connectionStatus, setConnectionStatus] = useState('Connected');
   const [pendingCapture, setPendingCapture] = useState(null);
   const [captureStatus, setCaptureStatus] = useState('Waiting for employee');
   const [displayName, setDisplayName] = useState('');
@@ -129,11 +129,11 @@ export const QRDisplayPage = () => {
     setIsAdminVerifying(true);
     setAdminExitError(null);
     try {
-      // Verify password via kiosk-lock unlock verification logic or standard auth
+      // Verify admin password before leaving kiosk
       await qrDisplayService.updateKioskLock(displayId, false, adminExitPassword);
       setShowAdminExitForm(false);
       setAdminExitPassword('');
-      navigate('/admin/qr-displays');
+      navigate('/admin/dashboard');
     } catch (err) {
       setAdminExitError(err.message || 'Incorrect admin password. Access denied.');
     } finally {
@@ -510,22 +510,20 @@ export const QRDisplayPage = () => {
       {/* TOP HEADER */}
       <header className="w-full max-w-4xl flex items-center justify-between z-10">
         <div className="flex items-center space-x-3.5">
-          {/* Back to Admin Dashboard Button (Available whenever Kiosk is Unlocked) */}
-          {!isKioskLocked && (
-            <button
-              type="button"
-              onClick={() => {
-                setAdminExitError(null);
-                setAdminExitPassword('');
-                setShowAdminExitForm(true);
-              }}
-              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-navy-900 border border-white/10 text-gray-300 hover:text-white hover:bg-white/10 hover:border-cyan-500/40 transition-all text-xs font-semibold shadow-lg group mr-1 cursor-pointer active:scale-95"
-              title="Enter Admin Password to return to Admin Portal"
-            >
-              <ArrowLeft className="w-4 h-4 text-cyan-400 group-hover:-translate-x-0.5 transition-transform" />
-              <span>Back to Admin</span>
-            </button>
-          )}
+          {/* Back to Admin Dashboard Button (Always available to Admin with Password verification) */}
+          <button
+            type="button"
+            onClick={() => {
+              setAdminExitError(null);
+              setAdminExitPassword('');
+              setShowAdminExitForm(true);
+            }}
+            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-navy-900 border border-white/10 text-gray-300 hover:text-white hover:bg-white/10 hover:border-cyan-500/40 transition-all text-xs font-semibold shadow-lg group mr-1 cursor-pointer active:scale-95"
+            title="Enter Admin Password to return to Admin Portal"
+          >
+            <ArrowLeft className="w-4 h-4 text-cyan-400 group-hover:-translate-x-0.5 transition-transform" />
+            <span>Back to Dashboard</span>
+          </button>
 
           <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-primary-600 to-cyan-400 flex items-center justify-center font-black text-white text-xl shadow-glow">
             VX
@@ -694,14 +692,7 @@ export const QRDisplayPage = () => {
                     className="w-72 h-72 sm:w-80 sm:h-80 object-contain rounded-2xl select-none"
                     draggable={false}
                   />
-                ) : isLoading || connectionStatus !== 'Connected' || cameraStatus !== 'Ready' ? (
-                  <div className="w-72 h-72 sm:w-80 sm:h-80 flex flex-col items-center justify-center bg-white rounded-2xl space-y-3">
-                    <div className="w-12 h-12 border-4 border-cyan-500/20 border-t-cyan-500 rounded-full animate-spin" />
-                    <span className="text-xs font-bold text-navy-900 tracking-wide uppercase">
-                      Generating Secure QR...
-                    </span>
-                  </div>
-                ) : (
+                ) : error ? (
                   <div className="w-72 h-72 sm:w-80 sm:h-80 flex flex-col items-center justify-center bg-slate-100 rounded-2xl p-4 text-center space-y-3">
                     <AlertTriangle className="w-10 h-10 text-red-500" />
                     <p className="text-xs text-red-600 font-semibold">{error}</p>
@@ -712,6 +703,13 @@ export const QRDisplayPage = () => {
                     >
                       Reconnect
                     </Button>
+                  </div>
+                ) : (
+                  <div className="w-72 h-72 sm:w-80 sm:h-80 flex flex-col items-center justify-center bg-white rounded-2xl space-y-3">
+                    <div className="w-12 h-12 border-4 border-cyan-500/20 border-t-cyan-500 rounded-full animate-spin" />
+                    <span className="text-xs font-bold text-navy-900 tracking-wide uppercase">
+                      Generating Secure QR...
+                    </span>
                   </div>
                 )}
               </div>
