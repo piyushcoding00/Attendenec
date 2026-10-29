@@ -331,16 +331,19 @@ export const ScannerPage = () => {
   }, [step, captureRequestId]);
 
   useEffect(() => {
-    if (step !== STEP.SUCCESS || attendanceResult?.action !== 'check_in') return undefined;
+    if (step !== STEP.SUCCESS) return undefined;
     const timerId = setTimeout(() => {
+      if (attendanceResult?.record) {
+        setTodayRecord(attendanceResult.record);
+      }
       setAttendanceResult(null);
       setCaptureRequestId(null);
       setErrorMessage(null);
       setLocationError(null);
       setUserLocation(null);
       qrValidationRef.current = false;
-      setStep(STEP.QR_SCANNER);
-    }, 3000);
+      setStep(STEP.ALREADY_IN);
+    }, 4000);
     return () => clearTimeout(timerId);
   }, [step, attendanceResult]);
 
@@ -706,11 +709,9 @@ export const ScannerPage = () => {
             )}
           </div>
 
-          {attendanceResult.action !== 'check_in' && (
-            <Button variant="primary" size="lg" onClick={() => navigate('/employee/home')} className="w-full shadow-glow">
-              Back to Dashboard
-            </Button>
-          )}
+          <Button variant="primary" size="lg" onClick={() => navigate('/employee/home')} className="w-full shadow-glow">
+            Back to Dashboard
+          </Button>
         </div>
       )}
 

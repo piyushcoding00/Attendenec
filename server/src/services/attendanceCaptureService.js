@@ -51,6 +51,13 @@ exports.createRequest = async (employee, rawToken, location) => {
   if (existingRecord?.checkOut) {
     throw new AppError('Today check-in and check-out are already complete.', 409);
   }
+  if (existingRecord?.checkIn && !existingRecord?.checkOut) {
+    const elapsedMinutes = (now.getTime() - new Date(existingRecord.checkIn).getTime()) / (1000 * 60);
+    if (elapsedMinutes < 15) {
+      const waitRemaining = Math.ceil(15 - elapsedMinutes);
+      throw new AppError('Aapki aaj ki check-in attendance pehle se lag chuki hai. Check-out ke liye kripya ' + waitRemaining + ' minute baad scan karein.', 409);
+    }
+  }
 
   await AttendanceCaptureRequest.updateMany(
     {
