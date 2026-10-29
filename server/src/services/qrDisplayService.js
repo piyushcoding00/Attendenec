@@ -103,18 +103,50 @@ exports.updateKioskLock = async (displayId, isLocked, actor, password) => {
   if (!isLocked) {
     const bcrypt = require('bcryptjs');
     const User = require('../models/User');
-    const admin = await User.findById(actor._id || actor.id).select('+password email role');
+    const cleanPassword = typeof password === 'string' ? password.trim() : '';
 
     let isPasswordValid = false;
-    if (admin && admin.isActive) {
-      if (admin.role === 'super_admin' && config.SUPERADMIN_PASSWORD_HASH) {
-        isPasswordValid = await bcrypt.compare(password, config.SUPERADMIN_PASSWORD_HASH);
+
+    // 1. Check directly against configured SUPERADMIN_PASSWORD_HASH
+    if (cleanPassword && config.SUPERADMIN_PASSWORD_HASH) {
+      try {
+        isPasswordValid = await bcrypt.compare(cleanPassword, config.SUPERADMIN_PASSWORD_HASH);
+      } catch (e) {
+        // Continue fallback
       }
-      if (!isPasswordValid && admin.password) {
-        isPasswordValid = await admin.correctPassword(password);
+    }
+
+    // 2. Check against actor / admin user in MongoDB
+    if (!isPasswordValid && actor) {
+      try {
+        const admin = await User.findById(actor._id || actor.id).select('+password +initialPassword email role isActive');
+        if (admin && admin.isActive) {
+          if (admin.password) {
+            isPasswordValid = await admin.correctPassword(cleanPassword);
+          }
+          if (!isPasswordValid && admin.initialPassword && admin.initialPassword === cleanPassword) {
+            isPasswordValid = true;
+          }
+        }
+      } catch (e) {
+        // Continue
       }
-      if (!isPasswordValid && config.SUPERADMIN_PASSWORD_HASH) {
-        isPasswordValid = await bcrypt.compare(password, config.SUPERADMIN_PASSWORD_HASH);
+    }
+
+    // 3. Fallback check for any active super_admin / hr_admin with this password
+    if (!isPasswordValid && cleanPassword) {
+      try {
+        const superAdminUser = await User.findOne({ email: config.SUPERADMIN_EMAIL }).select('+password +initialPassword');
+        if (superAdminUser && superAdminUser.isActive) {
+          if (superAdminUser.password) {
+            isPasswordValid = await superAdminUser.correctPassword(cleanPassword);
+          }
+          if (!isPasswordValid && superAdminUser.initialPassword && superAdminUser.initialPassword === cleanPassword) {
+            isPasswordValid = true;
+          }
+        }
+      } catch (e) {
+        // Continue
       }
     }
 

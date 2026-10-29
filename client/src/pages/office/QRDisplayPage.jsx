@@ -508,8 +508,8 @@ export const QRDisplayPage = () => {
       <div className="absolute bottom-10 left-1/3 w-80 h-80 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
 
       {/* TOP HEADER */}
-      <header className="w-full max-w-4xl flex items-center justify-between z-10">
-        <div className="flex items-center space-x-3.5">
+      <header className="w-full max-w-4xl flex flex-col sm:flex-row items-center justify-between gap-4 z-10">
+        <div className="flex flex-wrap items-center justify-center sm:justify-start gap-3">
           {/* Back to Admin Dashboard Button (Always available to Admin with Password verification) */}
           <button
             type="button"
@@ -518,33 +518,35 @@ export const QRDisplayPage = () => {
               setAdminExitPassword('');
               setShowAdminExitForm(true);
             }}
-            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-navy-900 border border-white/10 text-gray-300 hover:text-white hover:bg-white/10 hover:border-cyan-500/40 transition-all text-xs font-semibold shadow-lg group mr-1 cursor-pointer active:scale-95"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl bg-navy-900 border border-white/10 text-gray-300 hover:text-white hover:bg-white/10 hover:border-cyan-500/40 transition-all text-xs font-semibold shadow-lg group cursor-pointer active:scale-95"
             title="Enter Admin Password to return to Admin Portal"
           >
             <ArrowLeft className="w-4 h-4 text-cyan-400 group-hover:-translate-x-0.5 transition-transform" />
             <span>Back to Dashboard</span>
           </button>
 
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-primary-600 to-cyan-400 flex items-center justify-center font-black text-white text-xl shadow-glow">
-            VX
-          </div>
-          <div>
-            <h1 className="text-2xl font-black tracking-tight bg-gradient-to-r from-white via-slate-100 to-cyan-300 bg-clip-text text-transparent">
-              VORLDX
-            </h1>
-            <p className="text-[10px] uppercase tracking-widest text-gray-400">Attendance System</p>
-            <p className="text-xs uppercase tracking-widest text-cyan-400 font-semibold">
-              {displayName || 'ATTENDANCE KIOSK'}
-            </p>
-            {officeName && <p className="text-[11px] text-gray-300">{officeName}</p>}
-            {displayLocation && <p className="text-[11px] text-gray-400">{displayLocation}</p>}
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-gradient-to-tr from-primary-600 to-cyan-400 flex items-center justify-center font-black text-white text-lg sm:text-xl shadow-glow">
+              VX
+            </div>
+            <div>
+              <h1 className="text-xl sm:text-2xl font-black tracking-tight bg-gradient-to-r from-white via-slate-100 to-cyan-300 bg-clip-text text-transparent">
+                VORLDX
+              </h1>
+              <p className="text-[10px] uppercase tracking-widest text-gray-400">Attendance System</p>
+              <p className="text-xs uppercase tracking-widest text-cyan-400 font-semibold truncate max-w-[200px] sm:max-w-none">
+                {displayName || 'ATTENDANCE KIOSK'}
+              </p>
+              {officeName && <p className="text-[11px] text-gray-300">{officeName}</p>}
+              {displayLocation && <p className="text-[11px] text-gray-400">{displayLocation}</p>}
+            </div>
           </div>
         </div>
 
         {/* Live Clock & Online Indicator */}
-        <div className="flex items-center space-x-4">
-          <div className="text-right">
-            <span className="text-xl sm:text-2xl font-mono font-bold text-white tracking-wider">
+        <div className="flex items-center justify-center space-x-3 sm:space-x-4">
+          <div className="text-center sm:text-right">
+            <span className="text-lg sm:text-2xl font-mono font-bold text-white tracking-wider">
               {currentTime.toLocaleTimeString([], {
                 hour: '2-digit',
                 minute: '2-digit',
@@ -552,7 +554,7 @@ export const QRDisplayPage = () => {
                 timeZone: 'Asia/Kolkata',
               })}
             </span>
-            <p className="text-[11px] text-gray-400 uppercase tracking-wider">
+            <p className="text-[10px] sm:text-[11px] text-gray-400 uppercase tracking-wider">
               {currentTime.toLocaleDateString([], {
                 weekday: 'short',
                 month: 'short',
@@ -563,7 +565,7 @@ export const QRDisplayPage = () => {
           </div>
 
           <div
-            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-full border text-xs font-semibold ${
+            className={`flex items-center space-x-1.5 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full border text-xs font-semibold ${
               Boolean(qrImageDataUrl) && !error
                 ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
                 : 'bg-red-500/15 text-red-400 border-red-500/30'
